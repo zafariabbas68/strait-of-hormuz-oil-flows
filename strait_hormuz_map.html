@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Strait of Hormuz — Global Oil Trade Flows</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: #060d1a; overflow: hidden; }
+        #map { width: 100vw; height: 100vh; position: relative; background: #060d1a; }
+        .flow-canvas { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 400; }
+        .panel {
+            position: absolute; z-index: 1000;
+            background: rgba(5, 11, 22, 0.88);
+            border: 1px solid rgba(255, 176, 50, 0.22);
+            border-radius: 10px; padding: 13px 16px;
+            backdrop-filter: blur(12px);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+        #title-box { top: 14px; left: 50%; transform: translateX(-50%); text-align: center; white-space: nowrap; }
+        #title-box h1 { font-size: 14.5px; font-weight: 700; color: #ffb432; letter-spacing: 0.4px; }
+        #title-box p { font-size: 10px; color: rgba(255,255,255,0.42); margin-top: 3px; }
+        #legend { bottom: 20px; left: 15px; }
+        #legend h3, #stats h3 { font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.5); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 10px; }
+        .legend-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 11px; color: rgba(255,255,255,0.75); }
+        .l-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+        #stats { bottom: 20px; right: 15px; min-width: 195px; }
+        .stat-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+        .s-label { font-size: 11px; color: rgba(255,255,255,0.48); }
+        .s-val { font-size: 11px; font-weight: 700; color: #ffb432; }
+        #tooltip {
+            position: absolute; z-index: 2000;
+            background: rgba(5,11,22,0.96);
+            border: 1px solid rgba(255,176,50,0.3);
+            border-radius: 8px; padding: 9px 14px;
+            pointer-events: none; display: none;
+            font-family: 'Segoe UI', sans-serif;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.6);
+            max-width: 230px;
+        }
+        .tt-name { font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 2px; }
+        .tt-role { font-size: 10px; letter-spacing: 0.5px; margin-bottom: 5px; }
+        .tt-data { font-size: 12px; color: #ddd; line-height: 1.55; }
+        .tt-data b { color: #ffb432; }
+        .leaflet-control-attribution { background: rgba(0,0,0,0.35); color: rgba(255,255,255,0.22); font-size: 9px; }
+        .leaflet-control-zoom a { background: rgba(5,11,22,0.85); color: rgba(255,176,50,0.8); border-color: rgba(255,176,50,0.18); }
+        .leaflet-control-zoom a:hover { background: rgba(15,28,52,0.95); color: #ffb432; }
+    </style>
+</head>
+<body>
+<div id="map">
+    <div class="panel" id="title-box">
+        <h1>STRAIT OF HORMUZ — GLOBAL 20% OIL TRADE FLOWS</h1>
+        <p>Data Source: U.S. Energy Information Administration (EIA-2025)</p>
+    </div>
+    <div class="panel" id="legend">
+        <h3>Legend</h3>
+        <div class="legend-row"><div class="l-dot" style="background:#ff7b2c;box-shadow:0 0 6px #ff7b2c55;"></div><span>Oil Exporters (Persian Gulf)</span></div>
+        <div class="legend-row"><div class="l-dot" style="background:#00c5e8;box-shadow:0 0 6px #00c5e855;"></div><span>Oil Importers</span></div>
+        <div class="legend-row"><div class="l-dot" style="background:#ffb432;box-shadow:0 0 10px #ffb43266;width:13px;height:13px;"></div><span>Strait of Hormuz (chokepoint)</span></div>
+    </div>
+    <div class="panel" id="stats">
+        <h3>Key Statistics 2025</h3>
+        <div class="stat-row"><span class="s-label">Total daily flow</span><span class="s-val">20 mb/d</span></div>
+        <div class="stat-row"><span class="s-label">% of global oil consumption</span><span class="s-val">20%</span></div>
+        <div class="stat-row"><span class="s-label">Asian market share</span><span class="s-val">89.2%</span></div>
+        <div class="stat-row"><span class="s-label">Top exporter</span><span class="s-val">Saudi Arabia 37.2%</span></div>
+        <div class="stat-row"><span class="s-label">Top importer</span><span class="s-val">China 37.7%</span></div>
+        <div class="stat-row"><span class="s-label">LNG trade (Qatar)</span><span class="s-val">20% of global</span></div>
+    </div>
+    <div id="tooltip"><div class="tt-name" id="tt-name"></div><div class="tt-role" id="tt-role"></div><div class="tt-data" id="tt-data"></div></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const STRAIT = { lat: 26.55, lng: 56.45 };
+const exporters = [
+    { id:'SA', name:'Saudi Arabia', lat:24.7, lng:46.7, mbpd:5.50, share:37.2, ctrl:[21,52] },
+    { id:'IQ', name:'Iraq', lat:33.3, lng:44.4, mbpd:3.35, share:22.8, ctrl:[27,50] },
+    { id:'AE', name:'UAE', lat:23.4, lng:53.9, mbpd:1.90, share:12.9, ctrl:[22,55] },
+    { id:'IR', name:'Iran', lat:32.4, lng:51.4, mbpd:1.56, share:10.6, ctrl:[28,54] },
+    { id:'KW', name:'Kuwait', lat:29.4, lng:47.9, mbpd:1.48, share:10.1, ctrl:[25,52] },
+    { id:'QA', name:'Qatar', lat:25.3, lng:51.5, mbpd:0.66, share:4.5, ctrl:[23,54] }
+];
+const importers = [
+    { id:'CN', name:'China', lat:36.6, lng:101.8, mbpd:5.54, share:37.7, ctrl:[5,80] },
+    { id:'IN', name:'India', lat:20.6, lng:78.9, mbpd:2.16, share:14.7, ctrl:[12,66] },
+    { id:'KR', name:'South Korea', lat:37.5, lng:127.8, mbpd:1.76, share:12.0, ctrl:[1,97] },
+    { id:'JP', name:'Japan', lat:36.2, lng:138.2, mbpd:1.60, share:10.9, ctrl:[-2,108] },
+    { id:'SG', name:'Singapore', lat:1.3, lng:103.8, mbpd:0.51, share:3.5, ctrl:[4,82] },
+    { id:'TW', name:'Taiwan', lat:23.7, lng:121.0, mbpd:0.44, share:3.0, ctrl:[2,100] },
+    { id:'TH', name:'Thailand', lat:13.8, lng:100.5, mbpd:0.29, share:2.0, ctrl:[4,85] },
+    { id:'US', name:'United States', lat:39.0, lng:-95.0, mbpd:0.37, share:2.5, ctrl:[-18,18] },
+    { id:'PK', name:'Pakistan', lat:30.3, lng:69.3, mbpd:0.19, share:1.3, ctrl:[18,63] },
+    { id:'IT', name:'Italy', lat:41.9, lng:12.5, mbpd:0.22, share:1.5, ctrl:[23,32] },
+    { id:'FR', name:'France', lat:46.2, lng:2.2, mbpd:0.15, share:1.0, ctrl:[30,18] }
+];
+const MAX_MBPD = 5.54;
+
+const map = L.map('map', { center: [24.801119, 18.622151], zoom: 3, minZoom: 2, maxZoom: 8, zoomControl: true });
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OSM © CARTO | Data: EIA 2025', subdomains: 'abcd', maxZoom: 20
+}).addTo(map);
+
+const mapDiv = document.getElementById('map');
+const cvs = document.createElement('canvas');
+cvs.className = 'flow-canvas';
+mapDiv.appendChild(cvs);
+function resizeCvs() { const s = map.getSize(); cvs.width = s.x; cvs.height = s.y; }
+resizeCvs();
+map.on('resize', resizeCvs);
+
+function toScreen(latLng) { return map.latLngToContainerPoint(L.latLng(latLng[0], latLng[1])); }
+
+let T = 0;
+function drawFlow(ctx, fromLL, toLL, ctrlLL, color, mbpd, phaseOff) {
+    const from = toScreen(fromLL), to = toScreen(toLL), cp = toScreen(ctrlLL);
+    const lw = 0.6 + (mbpd / MAX_MBPD) * 5.0;
+    const np = Math.ceil(2 + (mbpd / MAX_MBPD) * 6);
+    const pr = Math.max(1.8, lw * 0.85);
+    const spd = 0.00011 + (mbpd / MAX_MBPD) * 0.00009;
+    const g = ctx.createLinearGradient(from.x, from.y, to.x, to.y);
+    g.addColorStop(0, color + 'cc'); g.addColorStop(0.5, color + '88'); g.addColorStop(1, color + '33');
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.quadraticCurveTo(cp.x, cp.y, to.x, to.y);
+    ctx.strokeStyle = g; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.globalAlpha = 0.5;
+    ctx.stroke();
+    ctx.restore();
+    for (let i = 0; i < np; i++) {
+        const t = ((T * spd + i / np + phaseOff) % 1.0);
+        const u = 1 - t;
+        const x = u*u*from.x + 2*u*t*cp.x + t*t*to.x;
+        const y = u*u*from.y + 2*u*t*cp.y + t*t*to.y;
+        const ea = Math.min(1, Math.min(t, 1-t) * 7);
+        ctx.save();
+        ctx.globalAlpha = ea * 0.95;
+        ctx.beginPath();
+        ctx.arc(x, y, pr, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+function drawDot(ctx, latLng, r, color, phase) {
+    const pt = toScreen(latLng);
+    const rp = r * (1 + 0.28 * Math.sin(T * 0.0028 + phase));
+    const grd = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, rp * 3.2);
+    grd.addColorStop(0, color + 'bb'); grd.addColorStop(0.4, color + '44'); grd.addColorStop(1, color + '00');
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, rp * 3.2, 0, Math.PI * 2);
+    ctx.fillStyle = grd;
+    ctx.fill();
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = 0.94;
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, rp, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.globalAlpha = 0.35;
+    ctx.beginPath();
+    ctx.arc(pt.x - rp*0.32, pt.y - rp*0.32, rp*0.38, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.restore();
+}
+
+function render(ts) {
+    T = ts;
+    const ctx = cvs.getContext('2d');
+    ctx.clearRect(0, 0, cvs.width, cvs.height);
+    exporters.forEach((e, i) => drawFlow(ctx, [e.lat,e.lng], [STRAIT.lat,STRAIT.lng], e.ctrl, '#ff7b2c', e.mbpd, i*0.17));
+    importers.forEach((im, i) => drawFlow(ctx, [STRAIT.lat,STRAIT.lng], [im.lat,im.lng], im.ctrl, '#00c5e8', im.mbpd, i*0.11));
+    exporters.forEach((e, i) => drawDot(ctx, [e.lat,e.lng], 3.5 + (e.mbpd/MAX_MBPD)*5, '#ff7b2c', i*1.1));
+    importers.forEach((im, i) => drawDot(ctx, [im.lat,im.lng], 3.2 + (im.mbpd/MAX_MBPD)*5, '#00c5e8', i*0.9));
+    drawDot(ctx, [STRAIT.lat, STRAIT.lng], 9.5, '#ffb432', 0);
+    requestAnimationFrame(render);
+}
+requestAnimationFrame(render);
+
+function mkLabel(lat, lng, html, offX, offY) {
+    const icon = L.divIcon({ className: '', html: `<div style="font-family:'Segoe UI',sans-serif;white-space:nowrap;text-shadow:0 0 8px #000,0 1px 4px #000;pointer-events:none;">${html}</div>`, iconAnchor: [-offX, -offY] });
+    L.marker([lat, lng], { icon, interactive: false }).addTo(map);
+}
+const EXP_COL = '#ffa566', IMP_COL = '#52d8f5', GOLD = '#ffb432';
+mkLabel(STRAIT.lat, STRAIT.lng, `<span style="font-size:11px;font-weight:700;color:${GOLD}">⚡ Strait of Hormuz</span>`, 6, 18);
+exporters.forEach(e => mkLabel(e.lat, e.lng, `<span style="font-size:10px;font-weight:600;color:${EXP_COL}">${e.name}</span><span style="font-size:9.5px;font-weight:700;color:${GOLD}"> ${e.share}%</span>`, 8, -2));
+importers.forEach(im => mkLabel(im.lat, im.lng, `<span style="font-size:10px;font-weight:600;color:${IMP_COL}">${im.name}</span><span style="font-size:9.5px;font-weight:700;color:${GOLD}"> ${im.share}%</span>`, 8, -2));
+
+const tooltip = document.getElementById('tooltip'), ttName = document.getElementById('tt-name'), ttRole = document.getElementById('tt-role'), ttData = document.getElementById('tt-data');
+function showTip(e, name, role, roleColor, mbpd, share, extra) {
+    ttName.textContent = name; ttRole.textContent = role; ttRole.style.color = roleColor;
+    ttData.innerHTML = `<b>${mbpd} mb/d</b> &nbsp;·&nbsp; <b>${share}%</b> of Strait flow` + (extra ? `<br>${extra}` : '');
+    tooltip.style.display = 'block'; moveTip(e);
+}
+function moveTip(e) { const x = e.containerPoint.x, y = e.containerPoint.y; tooltip.style.left = (cvs.width - x < 210 ? x - 215 : x + 14) + 'px'; tooltip.style.top = (y - 18) + 'px'; }
+function hideTip() { tooltip.style.display = 'none'; }
+function addHover(lat, lng, radiusM, name, role, rColor, mbpd, share, extra) {
+    const c = L.circle([lat, lng], { radius: radiusM, color:'transparent', fillColor:'transparent', fillOpacity:0 }).addTo(map);
+    c.on('mouseover', e => showTip(e, name, role, rColor, mbpd, share, extra));
+    c.on('mousemove', moveTip); c.on('mouseout', hideTip);
+}
+const sc = L.circle([STRAIT.lat, STRAIT.lng], { radius:90000, color:'transparent', fillColor:'transparent', fillOpacity:0 }).addTo(map);
+sc.on('mouseover', e => { ttName.textContent = 'Strait of Hormuz'; ttRole.textContent = '⚡ Critical Energy Chokepoint'; ttRole.style.color = '#ffb432'; ttData.innerHTML = '<b>20 mb/d</b> &nbsp;·&nbsp;<b>20% of Global Oil Trade Route<br>· 33 km wide'; tooltip.style.display = 'block'; moveTip(e); });
+sc.on('mousemove', moveTip); sc.on('mouseout', hideTip);
+exporters.forEach(e => addHover(e.lat, e.lng, 130000 + e.mbpd*55000, e.name, '⬆ OIL EXPORTER', '#ff7b2c', e.mbpd, e.share, null));
+importers.forEach(im => addHover(im.lat, im.lng, 150000 + im.mbpd*45000, im.name, '⬇ OIL IMPORTER', '#00c5e8', im.mbpd, im.share, null));
+</script>
+</body>
+</html>

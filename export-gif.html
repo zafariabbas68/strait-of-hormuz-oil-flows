@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Export Strait of Hormuz Map as GIF</title>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', monospace;
+      background: #060d1a;
+      padding: 20px;
+      display: flex;
+      gap: 20px;
+    }
+    #controls {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 10000;
+      background: rgba(0,0,0,0.9);
+      padding: 15px;
+      border-radius: 10px;
+      color: white;
+      font-family: monospace;
+      border: 1px solid #ffb432;
+    }
+    button {
+      background: #ffb432;
+      color: #000;
+      border: none;
+      padding: 10px 20px;
+      margin: 5px;
+      cursor: pointer;
+      border-radius: 5px;
+      font-weight: bold;
+    }
+    button:hover { background: #ffd700; }
+    .progress {
+      margin-top: 10px;
+      font-size: 12px;
+    }
+    .status {
+      color: #ffb432;
+      margin-top: 5px;
+    }
+    #map-container {
+      width: 800px;
+      height: 500px;
+      position: relative;
+    }
+  </style>
+</head>
+<body>
+<div id="controls">
+  <h3>🎬 Export as GIF</h3>
+  <button id="export-gif">📸 Start Recording (30 frames)</button>
+  <button id="stop-export" disabled>⏹️ Stop</button>
+  <div class="progress">
+    <div id="progress-text">Ready</div>
+    <progress id="progress-bar" value="0" max="100" style="width:100%"></progress>
+  </div>
+  <div class="status" id="status"></div>
+  <hr>
+  <small>📌 Records 30 frames over 3 seconds<br>🎨 Creates animated GIF</small>
+</div>
+
+<div id="map-container">
+  <!-- Your original map will load here -->
+</div>
+
+<script src="./import_export.js"></script>
+<script>
+// Load your original map inside the container
+const container = document.getElementById('map-container');
+const originalMapDiv = document.createElement('div');
+originalMapDiv.id = 'map';
+originalMapDiv.style.width = '800px';
+originalMapDiv.style.height = '500px';
+container.appendChild(originalMapDiv);
+
+// Re-initialize your map
+const map = L.map('map', {
+  center: [24.801119, 18.622151],
+  zoom: 3,
+  minZoom: 2,
+  maxZoom: 8,
+  zoomControl: true
+});
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com">CARTO</a>',
+  subdomains: 'abcd',
+  maxZoom: 20
+}).addTo(map);
+
+// Canvas overlay
+const mapDiv = document.getElementById('map');
+const cvs = document.createElement('canvas');
+cvs.className = 'flow-canvas';
+cvs.style.position = 'absolute';
+cvs.style.top = '0px';
+cvs.style.left = '0px';
+cvs.style.pointerEvents = 'none';
+cvs.style.zIndex = '400';
+mapDiv.appendChild(cvs);
+
+function resizeCvs() {
+  const s = map.getSize();
+  cvs.width = s.x; cvs.height = s.y;
+}
+resizeCvs();
+map.on('resize', resizeCvs);
+
+function toScreen(latLng) {
+  return map.latLngToContainerPoint(L.latLng(latLng[0], latLng[1]));
+}
+
+// Animation variables
+let T = 0;
+let animationId = null;
+
+function drawFlow(ctx, fromLL, toLL, ctrlLL, color, mbpd, phaseOff) {
+  const from = toScreen(fromLL);
+  const to   = toScreen(toLL);
+  const cp   = toScreen(ctrlLL);
+  const lw   = 0.6 + (mbpd / MAX_MBPD) * 5.0;
+  const np   = Math.ceil(2 + (mbpd / MAX_MBPD) * 6);
+  const pr   = Math.max(1.8, lw * 0.85);
+  const spd  = 0.00011 + (mbpd / MAX_MBPD) * 0.00009;
+
+  const g = ctx.createLinearGradient(from.x, from.y, to.x, to.y);
+  g.addColorStop(0,   color + 'cc');
+  g.addColorStop(0.5, color + '88');
+  g.addColorStop(1,   color + '33');
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(from.x, from.y);
+  ctx.quadraticCurveTo(cp.x, cp.y, to.x, to.y);
+  ctx.strokeStyle = g;
+  ctx.lineWidth   = lw;
+  ctx.lineCap     = 'round';
+  ctx.globalAlpha = 0.5;
+  ctx.stroke();
+  ctx.restore();
+
+  for (let i = 0; i < np; i++) {
+    const t = ((T * spd + i / np + phaseOff) % 1.0);
+    const u = 1 - t;
+    const x = u*u*from.x + 2*u*t*cp.x + t*t*to.x;
+    const y = u*u*from.y + 2*u*t*cp.y + t*t*to.y;
+    const ea = Math.min(1, Math.min(t, 1-t) * 7);
+
+    ctx.save();
+    ctx.globalAlpha = ea * 0.95;
+    ctx.beginPath();
+    ctx.arc(x, y, pr, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawDot(ctx, latLng, r, color, phase) {
+  const pt = toScreen(latLng);
+  const rp = r * (1 + 0.28 * Math.sin(T * 0.0028 + phase));
+  const grd = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, rp * 3.2);
+  grd.addColorStop(0,   color + 'bb');
+  grd.addColorStop(0.4, color + '44');
+  grd.addColorStop(1,   color + '00');
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(pt.x, pt.y, rp * 3.2, 0, Math.PI * 2);
+  ctx.fillStyle = grd;
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.globalAlpha = 0.94;
+  ctx.beginPath();
+  ctx.arc(pt.x, pt.y, rp, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.globalAlpha = 0.35;
+  ctx.beginPath();
+  ctx.arc(pt.x - rp*0.32, pt.y - rp*0.32, rp*0.38, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  ctx.restore();
+}
+
+function render(ts) {
+  T = ts;
+  const ctx = cvs.getContext('2d');
+  ctx.clearRect(0, 0, cvs.width, cvs.height);
+
+  exporters.forEach((e, i) =>
+    drawFlow(ctx, [e.lat,e.lng], [STRAIT.lat,STRAIT.lng], e.ctrl, '#ff7b2c', e.mbpd, i*0.17));
+  importers.forEach((im, i) =>
+    drawFlow(ctx, [STRAIT.lat,STRAIT.lng], [im.lat,im.lng], im.ctrl, '#00c5e8', im.mbpd, i*0.11));
+  exporters.forEach((e, i) =>
+    drawDot(ctx, [e.lat,e.lng], 3.5 + (e.mbpd/MAX_MBPD)*5, '#ff7b2c', i*1.1));
+  importers.forEach((im, i) =>
+    drawDot(ctx, [im.lat,im.lng], 3.2 + (im.mbpd/MAX_MBPD)*5, '#00c5e8', i*0.9));
+  drawDot(ctx, [STRAIT.lat, STRAIT.lng], 9.5, '#ffb432', 0);
+
+  animationId = requestAnimationFrame(render);
+}
+
+// Start animation
+resizeCvs();
+setTimeout(() => {
+  animationId = requestAnimationFrame(render);
+}, 100);
+
+// ============================================================
+// GIF EXPORT FUNCTIONALITY
+// ============================================================
+
+let isRecording = false;
+let frames = [];
+let frameCount = 0;
+const TOTAL_FRAMES = 30; // 30 frames = 3 seconds at 10fps
+let recordingStartTime = null;
+
+document.getElementById('export-gif').addEventListener('click', async () => {
+  if (isRecording) return;
+
+  isRecording = true;
+  frames = [];
+  frameCount = 0;
+  document.getElementById('export-gif').disabled = true;
+  document.getElementById('stop-export').disabled = false;
+  document.getElementById('status').innerHTML = '🎬 Recording frames...';
+  document.getElementById('progress-bar').value = 0;
+
+  // Record frames over 3 seconds
+  const interval = setInterval(async () => {
+    if (!isRecording) {
+      clearInterval(interval);
+      return;
+    }
+
+    // Capture the map container
+    const element = document.getElementById('map-container');
+    const canvas = await html2canvas(element, {
+      scale: 1.5,
+      backgroundColor: '#060d1a',
+      useCORS: true,
+      logging: false
+    });
+
+    frames.push(canvas);
+    frameCount++;
+    const progress = (frameCount / TOTAL_FRAMES) * 100;
+    document.getElementById('progress-bar').value = progress;
+    document.getElementById('progress-text').innerHTML = `Frame ${frameCount}/${TOTAL_FRAMES}`;
+
+    if (frameCount >= TOTAL_FRAMES) {
+      clearInterval(interval);
+      await createGIF();
+    }
+  }, 100); // 100ms = 10fps
+});
+
+async function createGIF() {
+  document.getElementById('status').innerHTML = '🎨 Creating GIF... (this may take a moment)';
+
+  // Initialize GIF encoder
+  const gif = new GIF({
+    workers: 2,
+    quality: 10,
+    width: 800,
+    height: 500,
+    workerScript: 'https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js'
+  });
+
+  // Add all frames to GIF
+  frames.forEach(frame => {
+    gif.addFrame(frame, { delay: 100 });
+  });
+
+  // Render GIF
+  gif.on('finished', function(blob) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'strait-of-hormuz-oil-flows.gif';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    document.getElementById('status').innerHTML = '✅ GIF created! Download started.';
+    document.getElementById('export-gif').disabled = false;
+    document.getElementById('stop-export').disabled = true;
+    isRecording = false;
+  });
+
+  gif.render();
+}
+
+document.getElementById('stop-export').addEventListener('click', () => {
+  isRecording = false;
+  document.getElementById('export-gif').disabled = false;
+  document.getElementById('stop-export').disabled = true;
+  document.getElementById('status').innerHTML = '⏹️ Recording stopped.';
+});
+</script>
+</body>
+</html>

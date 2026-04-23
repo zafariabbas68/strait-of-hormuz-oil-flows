@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Strait of Hormuz Sakib — Global Oil Trade Flows</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="./style.css"/>
+</head>
+<body>
+<div id="map">
+
+  <!-- Title -->
+  <div class="panel" id="title-box">
+    <h1>STRAIT OF HORMUZ &mdash; GLOBAL 20% OIL TRADE FLOWS</h1>
+    <p>Data Source: U.S. Energy Information Administration (EIA-2025)</p>
+  </div>
+
+  <!-- Legend -->
+  <div class="panel" id="legend">
+    <h3>Legend</h3>
+    <div class="legend-row">
+      <div class="l-dot" style="background:#ff7b2c;box-shadow:0 0 6px #ff7b2c55;"></div>
+      <span>Oil Exporters (Persian Gulf)</span>
+    </div>
+    <div class="legend-row">
+      <div class="l-dot" style="background:#00c5e8;box-shadow:0 0 6px #00c5e855;"></div>
+      <span>Oil Importers</span>
+    </div>
+    <div class="legend-row">
+      <div class="l-dot" style="background:#ffb432;box-shadow:0 0 10px #ffb43266;width:13px;height:13px;"></div>
+      <span>Strait of Hormuz (chokepoint)</span>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="panel" id="stats">
+    <h3>Key Statistics 2025</h3>
+    <div class="stat-row"><span class="s-label">Total daily flow</span><span class="s-val">20 mb/d</span></div>
+    <div class="stat-row"><span class="s-label">% of global oil consumption</span><span class="s-val">20%</span></div>
+    <div class="stat-row"><span class="s-label">Asian market share</span><span class="s-val">89.2%</span></div>
+    <div class="stat-row"><span class="s-label">Top exporter</span><span class="s-val">Saudi Arabia 37.2%</span></div>
+    <div class="stat-row"><span class="s-label">Top importer</span><span class="s-val">China 37.7%</span></div>
+    <div class="stat-row"><span class="s-label">LNG trade (Qatar)</span><span class="s-val">20% of global</span></div>
+  </div>
+
+  <!-- Tooltip -->
+  <div id="tooltip">
+    <div class="tt-name" id="tt-name"></div>
+    <div class="tt-role" id="tt-role"></div>
+    <div class="tt-data" id="tt-data"></div>
+  </div>
+
+</div><!-- #map -->
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="./import_export.js"></script>
+<script src="./map.js"></script>
+</body>
+</html>
